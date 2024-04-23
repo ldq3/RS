@@ -12,7 +12,7 @@ class Bipartite_Graph:
     max_nodes_per_hop = None,
     ) -> None:
         # if the variable id_mapped is False, the class will map user and item to a continues [0, N) range, and generate two attributes user_id_dict and item_id_dict 
-        if id_mapped:
+        if id_mapped == False:
             table["user"], self.user_id_dict = self.__map_id(table["user"])
             table["item"], self.item_id_dict = self.__map_id(table["item"])
         
