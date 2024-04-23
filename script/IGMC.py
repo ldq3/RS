@@ -1,5 +1,8 @@
 import scipy.sparse as sp
 import numpy as np
+import random
+import torch
+from torch_geometric.data import Data
 
 class Bipartite_Graph:
     '''
@@ -87,3 +90,84 @@ class Bipartite_Graph:
         mapped_id = np.array([id_dict[x] for x in id])
 
         return mapped_id, id_dict
+    
+    @staticmethod
+    def __one_hot(idx, length):
+        '''
+        one-hot encoding, 0 -> [1, 0, 0], 1 -> [0, 1, 0], 2 -> [0, 0, 1]
+        '''
+        return np.eye(length)[idx]
+
+    def u_neighbors(self, fringe):
+        return set(self.csr[list(fringe)].indices) if fringe else set([])
+    
+    def i_neighbors(self, fringe):
+        return set(self.csc[:, list(fringe)].indices) if fringe else set([])
+
+    def extract_data(self, edge):
+        '''
+        '''
+        u_nodes, u_dist, v_nodes, v_dist = self.extract_subgraph(edge)
+        return self.subgraph2data(u_nodes, u_dist, v_nodes, v_dist)
+
+    def extract_subgraph(self, edge):
+        '''
+        extract enclosing subgraph from the bipartite graph around the given edge
+        
+        Arg
+        ---
+        1. edge: tuple or list, (user_id, item_id)
+
+        Return
+        ------
+        u_nodes, u_dist, v_nodes, v_dist
+        '''
+        u_nodes, v_nodes = [edge[0]], [edge[1]]
+        u_dist, v_dist = [0], [0]
+
+        u_visited, v_visited = {edge[0]}, {edge[1]}
+        u_fringe, v_fringe = {edge[0]}, {edge[1]}
+        for dist in range(1, self.__h+1):
+            v_fringe, u_fringe = self.u_neighbors(u_fringe), self.i_neighbors(v_fringe)
+            u_fringe = u_fringe - u_visited
+            v_fringe = v_fringe - v_visited
+            u_visited = u_visited.union(u_fringe)
+            v_visited = v_visited.union(v_fringe)
+            if self.__sample_ratio < 1.0:
+                u_fringe = random.sample(u_fringe, int(self.__sample_ratio*len(u_fringe)))
+                v_fringe = random.sample(v_fringe, int(self.__sample_ratio*len(v_fringe)))
+            if self.__max_nodes_per_hop is not None:
+                if self.__max_nodes_per_hop < len(u_fringe):
+                    u_fringe = random.sample(u_fringe, self.__max_nodes_per_hop)
+                if self.__max_nodes_per_hop < len(v_fringe):
+                    v_fringe = random.sample(v_fringe, self.__max_nodes_per_hop)
+            if len(u_fringe) == 0 and len(v_fringe) == 0:
+                break
+            u_nodes = u_nodes + list(u_fringe)
+            v_nodes = v_nodes + list(v_fringe)
+            u_dist = u_dist + [dist] * len(u_fringe)
+            v_dist = v_dist + [dist] * len(v_fringe)
+        return u_nodes, u_dist, v_nodes, v_dist
+
+    def subgraph2data(self, u_nodes, u_dist, v_nodes, v_dist):
+        '''
+        convert the subgraph to the graph data
+        '''
+        subgraph = self.csr[u_nodes][:, v_nodes]
+        # remove link between target nodes
+        y = subgraph[0, 0]
+        subgraph[0, 0] = 0
+        u, v, r = sp.find(subgraph) 
+
+        # prepare pyg graph constructor inputh
+        v += len(u_nodes)
+        node_labels = [x*2 for x in u_dist] + [x*2+1 for x in v_dist]
+
+        u, v = torch.IntTensor(u), torch.IntTensor(v)
+        r = torch.ByteTensor(r)  
+        edge_index = torch.stack([torch.cat([u, v]), torch.cat([v, u])], 0)
+        edge_type = torch.cat([r, r])
+        x = torch.ByteTensor(self.__one_hot(node_labels, 2*self.__h + 2))
+        y = torch.ByteTensor([y])
+
+        return Data(x, edge_index, edge_type=edge_type, y=y)
