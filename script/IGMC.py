@@ -2,6 +2,42 @@ import scipy.sparse as sp
 import numpy as np
 
 class Bipartite_Graph:
+    '''
+    Description
+    -----------
+    The bipartite graph to represent the rating of user and item. 
+
+    You need to pass a DataFrame with columns "user", "item", "rating" to initialize the class. It's recommended to pass the complete dataset rather than the splited dataset, as the class will map the user and item id to a continues [0, N) range.
+
+    The primary function of this class is to extract the enclosing subgraph around the given edge. The subgraph is a bipartite graph with the target edge removed. The subgraph is then converted to the PyG Data object.
+
+    Arg
+    ---
+    1. table: DataFrame, with columns "user", "item", "rating"
+    - id_mapped: bool which default False, whether the user and item id had be mapped to a continues [0, N) range
+    - map_rating: function, which default None, map the rating to a continues [1, N) range
+    - extracting_setting:
+        - h: int, which default 1, the hop of the enclosing subgraph
+        - sample_ratio: float, which default 1.0, the ratio of the nodes to be sampled in each hop
+        - max_nodes_per_hop: int, which default None, the max number of nodes to be sampled in each hop
+
+    Attribute
+    ---------
+    - edges: ndarray, the edges of the bipartite graph
+    - if you set the id_mapped to False, the class will generate two attributes user_id_dict and item_id_dict:
+        - user_id_dict: dict, the mapping from the original user id to the new user id
+        - item_id_dict: dict, the mapping from the original item id to the new item id
+    - csr: scipy.sparse.csr_matrix, the user-item rating matrix
+    - csc: scipy.sparse.csc_matrix, the item-user rating matrix
+
+    Method
+    ------
+    - extract_data: extract the enclosing subgraph around the given edge and convert the subgraph to the PyG Data object
+    - extract_subgraph: extract the enclosing subgraph around the given edge
+    - subgraph2data: convert the subgraph to the PyG Data object
+    - u_neighbors: get the neighbors of the user nodes
+    - i_neighbors: get the neighbors of the item nodes
+    '''
     def __init__(
     self,
     table,
@@ -26,9 +62,9 @@ class Bipartite_Graph:
         '''
         self.csr = sp.csr_matrix((table["rating"].values, (self.edges[:, 0], self.edges[:, 1])))
         self.csc = self.csr.tocsc()
-        self.h = h
-        self.sample_ratio = sample_ratio
-        self.max_nodes_per_hop = max_nodes_per_hop 
+        self.__h = h
+        self.__sample_ratio = sample_ratio
+        self.__max_nodes_per_hop = max_nodes_per_hop 
     
     @staticmethod
     def __map_id(id):
