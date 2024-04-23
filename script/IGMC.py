@@ -2,7 +2,8 @@ import scipy.sparse as sp
 import numpy as np
 import random
 import torch
-from torch_geometric.data import Data
+from torch_geometric.data import Data, InMemoryDataset
+import os
 
 class Bipartite_Graph:
     '''
@@ -171,3 +172,22 @@ class Bipartite_Graph:
         y = torch.ByteTensor([y])
 
         return Data(x, edge_index, edge_type=edge_type, y=y)
+    
+class Graph_Dataset(InMemoryDataset):
+    '''
+    in memory dataset
+    '''
+    def __init__(self, dataset_name, file_name, data_list=None, root=".."):
+        super(Graph_Dataset, self).__init__(root)
+        self.dataset_name = dataset_name
+
+        if data_list is not None:
+            if not os.path.exists(self.processed_dir):
+                os.makedirs(self.processed_dir)
+            torch.save(self.collate(data_list), os.path.join(self.processed_dir, file_name + '.pt'))
+        else:
+            self.data, self.slices = torch.load(os.path.join(self.processed_dir, file_name + '.pt'))
+
+    @property
+    def processed_dir(self) -> str:
+        return os.path.join(self.root, 'processed_data', self.dataset_name)
